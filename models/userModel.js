@@ -32,16 +32,24 @@ const userSchema = mongoose.Schema(
 
 // 🔐 Compare entered password with hashed password
 userSchema.methods.matchPassword = async function (enteredPassword) {
-  return bcrypt.compare(enteredPassword, this.password);
+  return await bcrypt.compare(enteredPassword, this.password);
 };
 
-// 🔐 Hash password before saving (only if modified)
+// 🔐 Hash password only if it’s newly set or modified
 userSchema.pre("save", async function (next) {
-  if (!this.isModified("password")) return next();
+  try {
+    // If password wasn’t modified, skip re-hashing
+    if (!this.isModified("password")) {
+      return next();
+    }
 
-  const salt = await bcrypt.genSalt(10);
-  this.password = await bcrypt.hash(this.password, salt);
-  next();
+    // Generate salt and hash password
+    const salt = await bcrypt.genSalt(10);
+    this.password = await bcrypt.hash(this.password, salt);
+    next();
+  } catch (err) {
+    next(err);
+  }
 });
 
 const User = mongoose.model("User", userSchema);

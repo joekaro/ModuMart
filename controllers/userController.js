@@ -1,10 +1,9 @@
-// backend/controllers/userController.js
 import asyncHandler from "express-async-handler";
 import jwt from "jsonwebtoken";
 import User from "../models/userModel.js";
 
 /* ===========================================
-   🔐 Generate JWT (keeps existing behavior)
+   🔐 Generate JWT
 =========================================== */
 const generateToken = (id, expiresIn = "30d") => {
   return jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn });
@@ -25,6 +24,7 @@ const registerUser = asyncHandler(async (req, res) => {
   const user = await User.create({ name, email, password });
 
   if (user) {
+    console.log("✅ New user registered:", user.email); // 🟢 Debug line
     res.status(201).json({
       _id: user._id,
       name: user.name,
@@ -44,9 +44,24 @@ const registerUser = asyncHandler(async (req, res) => {
 const authUser = asyncHandler(async (req, res) => {
   const { email, password } = req.body;
 
+  console.log("🟢 Login attempt for:", email); // Debug log
+
   const user = await User.findOne({ email });
 
-  if (user && (await user.matchPassword(password))) {
+  if (!user) {
+    console.log("❌ User not found in DB");
+    res.status(401);
+    throw new Error("Invalid email or password");
+  }
+
+  console.log("🟡 Stored (DB) password:", user.password); // Debug hashed password
+  console.log("🟡 Entered password:", password); // Debug entered password
+
+  const isMatch = await user.matchPassword(password);
+  console.log("🧩 Password match result:", isMatch); // Debug compare result
+
+  if (user && isMatch) {
+    console.log("✅ Login successful for:", email);
     res.json({
       _id: user._id,
       name: user.name,
@@ -55,6 +70,7 @@ const authUser = asyncHandler(async (req, res) => {
       token: generateToken(user._id),
     });
   } else {
+    console.log("❌ Invalid credentials for:", email);
     res.status(401);
     throw new Error("Invalid email or password");
   }
@@ -62,10 +78,8 @@ const authUser = asyncHandler(async (req, res) => {
 
 /* ===========================================
    👤 Get logged-in user's profile (GET /api/users/profile)
-   @access Protected
 =========================================== */
 const getUserProfile = asyncHandler(async (req, res) => {
-  // req.user is attached by protect middleware
   const user = await User.findById(req.user._id).select("-password");
   if (user) {
     res.json(user);
@@ -77,9 +91,6 @@ const getUserProfile = asyncHandler(async (req, res) => {
 
 /* ===========================================
    ✏️ Update logged-in user's profile (PUT /api/users/profile)
-   Accepts name, email, password
-   Returns updated user + new token (optional)
-   @access Protected
 =========================================== */
 const updateUserProfile = asyncHandler(async (req, res) => {
   const user = await User.findById(req.user._id);
@@ -91,7 +102,9 @@ const updateUserProfile = asyncHandler(async (req, res) => {
 
   user.name = req.body.name ?? user.name;
   user.email = req.body.email ?? user.email;
-  if (req.body.password) {
+
+  if (req.body.password && req.body.password.length >= 6) {
+    console.log("🟢 Password change requested for user:", user.email);
     user.password = req.body.password;
   }
 
@@ -102,7 +115,7 @@ const updateUserProfile = asyncHandler(async (req, res) => {
     name: updatedUser.name,
     email: updatedUser.email,
     isAdmin: updatedUser.isAdmin,
-    token: generateToken(updatedUser._id), // helpful so frontend can update token if needed
+    token: generateToken(updatedUser._id),
   });
 });
 
@@ -115,7 +128,7 @@ const getUsers = asyncHandler(async (req, res) => {
 });
 
 /* ===========================================
-   🔍 Admin: Get user by id (GET /api/users/:id) @access Admin
+   🔍 Admin: Get user by id (GET /api/users/:id)
 =========================================== */
 const getUserById = asyncHandler(async (req, res) => {
   const user = await User.findById(req.params.id).select("-password");
@@ -127,7 +140,7 @@ const getUserById = asyncHandler(async (req, res) => {
 });
 
 /* ===========================================
-   ✏️ Admin: Update user by id (PUT /api/users/:id) @access Admin
+   ✏️ Admin: Update user (PUT /api/users/:id)
 =========================================== */
 const updateUser = asyncHandler(async (req, res) => {
   const user = await User.findById(req.params.id);
@@ -135,7 +148,6 @@ const updateUser = asyncHandler(async (req, res) => {
   if (user) {
     user.name = req.body.name ?? user.name;
     user.email = req.body.email ?? user.email;
-    // allow false explicitly
     user.isAdmin = req.body.isAdmin ?? user.isAdmin;
 
     const updated = await user.save();
@@ -152,7 +164,7 @@ const updateUser = asyncHandler(async (req, res) => {
 });
 
 /* ===========================================
-   ❌ Admin: Delete user (DELETE /api/users/:id) @access Admin
+   ❌ Admin: Delete user
 =========================================== */
 const deleteUser = asyncHandler(async (req, res) => {
   const user = await User.findById(req.params.id);
@@ -166,7 +178,7 @@ const deleteUser = asyncHandler(async (req, res) => {
 });
 
 /* ===========================================
-   🔁 Export controllers (keep names consistent)
+   🔁 Export
 =========================================== */
 export {
   registerUser,
